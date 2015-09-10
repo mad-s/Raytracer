@@ -2,6 +2,6 @@ CC=g++
 CFLAGS=-I.
 
 default: src/test.cpp
-	$(CC) -std=c++11 -o build/raytracer src/test.cpp -lOpenCL
+	$(CC) -std=c++11 -g -o build/raytracer src/main.cpp -lOpenCL
 
 
