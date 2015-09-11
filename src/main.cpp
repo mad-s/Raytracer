@@ -5,23 +5,28 @@
 #include <CL/cl.hpp>
 #include <unistd.h>
 
-#define STRINGIFY(A) #A
-std::string kernel_code = 
-#include "raycast.cl"
+#include "raycast.cl.h"
 
+enum Material {
+	DIFFUSE,
+	REFLECTIVE,
+	REFRACTIVE
+};
 
 struct Sphere {
 	cl_float3 color;
 	cl_float3 emisiion;
 	cl_float3 pos;
 	cl_float radius;
+	enum Material material;
 };
 Sphere spheres[] = {
-	{cl_float3{.5,.5,.5},cl_float3{},cl_float3{0,-1000,0},1000},
-	{cl_float3{},cl_float3{4,10,4},cl_float3{0,3,3},1},
-	{cl_float3{.5,.5,.5},cl_float3{},cl_float3{0,1002.1,0},1000},
-	{cl_float3{.25,.25,.75},cl_float3{},cl_float3{-1,.5,3},.5},
-	{cl_float3{.75,.25,.25},cl_float3{},cl_float3{1,0,3},.3}
+	{cl_float3{.5,.5,.5},cl_float3{},cl_float3{0,-1000,0},1000,DIFFUSE},
+	{cl_float3{},cl_float3{10,10,9},cl_float3{0,3,3},1,DIFFUSE},
+	{cl_float3{.5,.5,.5},cl_float3{},cl_float3{0,1002.1,0},1000,DIFFUSE},
+	{cl_float3{.25,.25,.75},cl_float3{},cl_float3{-1,.5,3},.5,DIFFUSE},
+	{cl_float3{.75,.25,.25},cl_float3{},cl_float3{1,0,3},.3,DIFFUSE},
+	{cl_float3{.99,.99,.99},cl_float3{},cl_float3{0,5,1007},1000,REFLECTIVE}
 };
 
 struct Ray {
@@ -112,15 +117,15 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	std::cerr<<"Selected "<<selected_device.getInfo<CL_DEVICE_VERSION>()<<std::endl;
+	std::cerr<<"Selected "<<selected_device.getInfo<CL_DEVICE_NAME>()<<"("<<selected_device.getInfo<CL_DEVICE_VERSION>()<<")"<<std::endl;
 
 
 	cl::Context context({selected_device});
 
 	cl::Program::Sources sources;
 
-
-	sources.push_back({kernel_code.c_str(), kernel_code.length()});
+	
+	sources.push_back({(char*)raycast_cl, (unsigned long int)raycast_cl_len});
 
 	cl::Program program(context,sources);
 	if(program.build({selected_device})!=CL_SUCCESS){
@@ -130,9 +135,9 @@ int main(int argc, char* argv[])
 
 	cl::CommandQueue queue(context,selected_device, CL_QUEUE_PROFILING_ENABLE);
 
-	int width=1024;
-	int height=768;
-	int samples=100;
+	int width=1920;
+	int height=1080;
+	int samples=500;
 	Ray camera = {cl_float3{0,1,0},cl_float3{0,0,1}};
 	cl::Buffer screen_buffer(context,CL_MEM_WRITE_ONLY,width*height*sizeof(cl_float4));
 	cl::Buffer sphere_buffer(context,CL_MEM_READ_WRITE,sizeof(spheres));
@@ -154,14 +159,14 @@ int main(int argc, char* argv[])
 	evt.wait();
 	long long delta = evt.getProfilingInfo<CL_PROFILING_COMMAND_END>()-evt.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	std::cerr<<"Took "<<delta/1000000<<"ms to render\n";
-	std::cerr<<"That is "<<delta/(4*width*height*samples)<<"ns per sample\n";
+	std::cerr<<"That is "<<delta/(4ll*width*height*samples)<<"ns per sample\n";
 	
 	cl_float4* buff = (cl_float4*)queue.enqueueMapBuffer(screen_buffer,CL_TRUE,CL_MAP_READ,0,width*height*sizeof(cl_float4), NULL, &evt);
 	evt.wait();
 	
 	delta = evt.getProfilingInfo<CL_PROFILING_COMMAND_END>()-evt.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 	std::cerr<<"Took "<<delta/1000<<"µs to transfer "<< width*height*sizeof(cl_float4)/sizeof(char) <<" bytes\n";
-	std::cerr<<"That is "<<1000000000*width*height*sizeof(cl_float4)/sizeof(char)/(2<<20)<<"MiB/s\n";
+	std::cerr<<"That is "<<(1000000000ll*width*height*sizeof(cl_float4)/sizeof(char)>>20)<<"MiB/s\n";
 	std::cout<<"P3\n"<<width<<" "<<height<<"\n255\n";
 	for(int i=0;i<width*height;i++){
 		std::cout<<toInt(buff[i].s[0])<<" ";
