@@ -22,11 +22,11 @@ struct Ray {
 
 #define delta 1e-4f
 
-float rand(uint2* state){
+float rand(__private uint2* state){
 	const float invMaxInt = 1.0f/4294967296.0f;
 	uint x = (*state).x*17+(*state).y*13123;
-	*(state).x = (x<<13)^x;
-	*(state).y ^= (x<<7);
+	(*state).x = (x<<13)^x;
+	(*state).y ^= (x<<7);
 	x = x*(x*x*15731+74323)+871483;
 	return convert_float(x)*invMaxInt;
 }
@@ -51,7 +51,7 @@ float intersectSphere(struct Ray* ray, __constant struct Sphere* sphere){
 	}
 }
 
-float3 randHemisphere(float3 normal, uint2* state){
+float3 randHemisphere(float3 normal, __private uint2* state){
 	float3 u=fast_normalize(cross(fabs(normal.x)>0.1f?(float3)(0,1,0):(float3)(1,0,0),normal));
 	float3 v=cross(normal,u);
 	float r1=rand(state)*2*M_PI_F;
@@ -77,7 +77,7 @@ float intersect(struct Ray* ray, __constant struct Sphere* spheres, uint sphereC
 }
 
 
-float3 raycast(struct Ray* r, __constant struct Sphere* spheres, uint sphereCount, uint2* randState){
+float3 raycast(struct Ray* r, __constant struct Sphere* spheres, uint sphereCount, __private uint2* randState){
 	unsigned depth = 0;
 	float3 radiance=(float3)(0,0,0);
 	float3 throughput=(float3)(1,1,1); //how the color has been affected so far
