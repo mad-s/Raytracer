@@ -22,11 +22,9 @@ struct Sphere {
 };
 Sphere spheres[] = {
 	{cl_float3{.5,.5,.5},cl_float3{},cl_float3{0,-1000,0},1000,DIFFUSE},
-	{cl_float3{},cl_float3{10,10,9},cl_float3{0,3,3},1,DIFFUSE},
-	{cl_float3{.5,.5,.5},cl_float3{},cl_float3{0,1002.1,0},1000,DIFFUSE},
+	{cl_float3{},cl_float3{10,10,9},cl_float3{0,3,0},1,DIFFUSE},
 	{cl_float3{.25,.25,.75},cl_float3{},cl_float3{-1,.5,3},.5,DIFFUSE},
-	{cl_float3{.75,.25,.25},cl_float3{},cl_float3{1,0,3},.3,DIFFUSE},
-	{cl_float3{.99,.99,.99},cl_float3{},cl_float3{0,5,1007},1000,REFLECTIVE}
+	{cl_float3{.9,.9,.9},cl_float3{},cl_float3{1,.5,3},.5,REFLECTIVE},
 };
 
 struct Ray {
@@ -137,7 +135,7 @@ int main(int argc, char* argv[])
 
 	int width=1920;
 	int height=1080;
-	int samples=500;
+	int samples=20;
 	Ray camera = {cl_float3{0,1,0},cl_float3{0,0,1}};
 	cl::Buffer screen_buffer(context,CL_MEM_WRITE_ONLY,width*height*sizeof(cl_float4));
 	cl::Buffer sphere_buffer(context,CL_MEM_READ_WRITE,sizeof(spheres));
