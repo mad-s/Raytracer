@@ -22,13 +22,18 @@ struct Ray {
 
 #define delta 1e-4f
 
+#define half_cos cos
+#define half_sin sin
+#define half_sqrt sqrt
+#define fast_normalize normalize
+
 float rand(__private uint2* state){
 	const float invMaxInt = 1.0f/4294967296.0f;
-	uint x = (*state).x*17+(*state).y*13123;
+	uint x = (*state).x * 17 + (*state).y * 13123;
 	(*state).x = (x<<13)^x;
 	(*state).y ^= (x<<7);
-	x = x*(x*x*15731+74323)+871483;
-	return convert_float(x)*invMaxInt;
+
+	return convert_float(x*(x*x*15731+74323) + 871483)*invMaxInt;
 }
 
 
@@ -55,7 +60,7 @@ float3 randHemisphere(float3 normal, __private uint2* state){
 	float3 u=fast_normalize(cross(fabs(normal.x)>0.1f?(float3)(0,1,0):(float3)(1,0,0),normal));
 	float3 v=cross(normal,u);
 	float r1=rand(state)*2*M_PI_F;
-	float r2=rand(state);
+	float r2=0.1 + 0.9 * rand(state);
 	float r2s=half_sqrt(r2);
 	return u*half_cos(r1)*r2s+v*half_sin(r1)*r2s+normal*half_sqrt(1-r2);
 	
@@ -84,7 +89,6 @@ float3 raycast(struct Ray* r, __constant struct Sphere* spheres, uint sphereCoun
 	struct Ray curr = *r;
 	__constant struct Sphere* hit;
 
-	/*return throughput;*/
 	for(;depth<4;depth++){
 		if(dot(throughput,throughput)<0.001f)return radiance;
 		__constant struct Sphere* hit;
@@ -104,6 +108,22 @@ float3 raycast(struct Ray* r, __constant struct Sphere* spheres, uint sphereCoun
 			float3 d = curr.dir-2.0f*n*dot(n,curr.dir);
 			curr.origin=x+delta*d;
 			curr.dir = d;
+		} else if(hit->material==REFRACTIVE){
+			float dirn = dot(curr.dir, n);
+			bool inside = dirn > 0;
+			float refFactor = inside ? 0.5 : 2.0;
+			float cosOut2 = 1 - refFactor * refFactor * (1 - dirn * dirn);
+			if (cosOut2 < 0) {
+				curr.dir = curr.dir - 2.0f * n * dirn;
+				curr.origin = x + delta * curr.dir;
+			} else {
+				float cosOut = sqrt(cosOut2);
+				float3 parallel = cross(n, cross(-n, curr.dir));
+
+				curr.dir = refFactor*parallel - (inside ? -1 : 1) * n * cosOut;
+				curr.origin = x + delta * curr.dir;
+			}
+			
 		}
 
 		
@@ -113,7 +133,7 @@ float3 raycast(struct Ray* r, __constant struct Sphere* spheres, uint sphereCoun
 
 __kernel void main(__global float4* output, uint w, uint h, uint samples, struct Ray camera, __constant struct Sphere* spheres, uint sphereCount){
 	int id = get_global_id(0);
-	uint2 state = (uint2)(samples,id*71235);
+	uint2 state = (uint2)(id,0);
 	uint x = id%w;
 	uint y = id/w;
 	float3 cx=normalize((float3)(camera.dir.z,0.0,-camera.dir.x));
@@ -124,10 +144,10 @@ __kernel void main(__global float4* output, uint w, uint h, uint samples, struct
 		for(int sx = 0; sx<2; sx++){
 			float3 subpix_color=(float3)(0,0,0);
 			for(int s = 0; s<samples; s++){
-				float3 d = normalize(camera.dir + cx*(float)(((rand(&state)+sx)/2.0+x-w/2)/h) + cy*(float)(((rand(&state)+sy)/2.0+y-h/2)/h));
+				float3 d = camera.dir + cx*(float)(((rand(&state)+sx)/2.0+x-w/2)/h) + cy*(float)(((rand(&state)+sy)/2.0+y-h/2)/h);
 				struct Ray r;
-				r.origin=camera.origin;
-				r.dir=d;
+				r.origin=camera.origin+0.1f*d;
+				r.dir=normalize(d);
 				subpix_color += 5.0f*raycast(&r, spheres, sphereCount, &state)*invSamp;
 			}
 			
