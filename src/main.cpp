@@ -19,18 +19,19 @@ struct Sphere {
 	cl_float3 pos;
 	cl_float radius;
 	enum Material material;
+	cl_float gloss;
 };
 
-const float big = 1e5;
+const float big = 400;
 Sphere spheres[] = {
-	{cl_float3{.75,.25,.25},	cl_float3{},		cl_float3{-big-10,0,0},	big,	DIFFUSE},
-	{cl_float3{.75,.75,.75},	cl_float3{},		cl_float3{0,-big-7,0},	big,	DIFFUSE},
-	{cl_float3{.75,.75,.75},	cl_float3{},		cl_float3{0,0,big+10},	big,	DIFFUSE},
-	{cl_float3{.25,.25,.75},	cl_float3{},		cl_float3{big+10,0,0},	big,	DIFFUSE},
-	{cl_float3{.75,.75,.75},	cl_float3{},		cl_float3{0,big+10,0},	big,	DIFFUSE},
-	{cl_float3{.75,.75,.75},	cl_float3{},		cl_float3{0,0,-big-30},	big,	DIFFUSE},
-	{cl_float3{1,1,1},		cl_float3{},		cl_float3{4,-4,4},	3,	REFLECTIVE},
-	{cl_float3{},			cl_float3{12,12,12},	cl_float3{0,19,5},	10,	DIFFUSE}
+	{cl_float3{.75,.25,.25},	cl_float3{},		cl_float3{-big-10,0,0},	big,	DIFFUSE,	0.01},
+	{cl_float3{.75,.75,.75},	cl_float3{},		cl_float3{0,-big-7,0},	big,	DIFFUSE,	0.01},
+	{cl_float3{.75,.75,.75},	cl_float3{},		cl_float3{0,0,big+10},	big,	DIFFUSE,	0.01},
+	{cl_float3{.25,.25,.75},	cl_float3{},		cl_float3{big+10,0,0},	big,	DIFFUSE,	0.01},
+	{cl_float3{.75,.75,.75},	cl_float3{},		cl_float3{0,big+10,0},	big,	DIFFUSE,	0.01},
+	//{cl_float3{.75,.75,.75},	cl_float3{},		cl_float3{0,0,-big-30},	big,	DIFFUSE,	0.01},
+	{cl_float3{1,1,1},		cl_float3{},		cl_float3{4,-4,4},	3,	REFLECTIVE,	0.9},
+	{cl_float3{},			cl_float3{12,12,12},	cl_float3{0,19,5},	10,	DIFFUSE,	0.01}
 };
 
 struct Ray {
@@ -139,14 +140,14 @@ int main(int argc, char* argv[])
 
 	cl::CommandQueue queue(context,selected_device, CL_QUEUE_PROFILING_ENABLE);
 
-	int width=1366;
-	int height=768;
-	int samples=25;
+	int width=1920;
+	int height=1080;
+	int samples=1000;
 	Ray camera = {cl_float3{0.5,1,-16},cl_float3{0.0014,0,1}};
 	cl::Buffer screen_buffer(context,CL_MEM_WRITE_ONLY,width*height*sizeof(cl_float4));
 	cl::Buffer sphere_buffer(context,CL_MEM_READ_WRITE,sizeof(spheres));
 	queue.enqueueWriteBuffer(sphere_buffer,CL_FALSE,0,sizeof(spheres),spheres);
-	cl::Kernel kernel(program,"main");
+	cl::Kernel kernel(program,"do_raytrace");
 	kernel.setArg(0,screen_buffer);
 	kernel.setArg(1,(cl_uint)(width));
 	kernel.setArg(2,(cl_uint)(height));

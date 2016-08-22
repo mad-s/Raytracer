@@ -12,6 +12,7 @@ struct Sphere {
 	float3 pos;
 	float radius;
 	enum Material material;
+	float gloss;
 };
 
 struct Ray {
@@ -22,10 +23,10 @@ struct Ray {
 
 #define delta 1e-4f
 
-#define half_cos cos
-#define half_sin sin
-#define half_sqrt sqrt
-#define fast_normalize normalize
+//#define half_cos cos
+//#define half_sin sin
+//#define half_sqrt sqrt
+//#define fast_normalize normalize
 
 float rand(__private uint2* state){
 	const float invMaxInt = 1.0f/4294967296.0f;
@@ -41,38 +42,38 @@ float intersectSphere(struct Ray* ray, __constant struct Sphere* sphere){
 	float3 v = ray->origin-sphere->pos;
 	float vd = dot(v,ray->dir);
 	float det = vd*vd-dot(v,v)+sphere->radius*sphere->radius;
-	if(det<0)return 0;
-	else det=sqrt(det);
+	if(det<0)return HUGE_VALF;
+	det=sqrt(det);
 	float t = -vd-det;
 	if(t>0){
 		return t;
-	}else{
+	} else {
 		t=-vd+det;
 		if(t>0){
 			return t;
 		}else{
-			return 0;
+			return HUGE_VALF;
 		}
 	}
 }
 
-float3 randHemisphere(float3 normal, __private uint2* state){
+float3 randHemisphere(float3 normal, float theta, __private uint2* state){
 	float3 u=fast_normalize(cross(fabs(normal.x)>0.1f?(float3)(0,1,0):(float3)(1,0,0),normal));
 	float3 v=cross(normal,u);
 	float r1=rand(state)*2*M_PI_F;
-	float r2=0.1 + 0.9 * rand(state);
+	float r2=mix(0.f, theta, rand(state));
 	float r2s=half_sqrt(r2);
 	return u*half_cos(r1)*r2s+v*half_sin(r1)*r2s+normal*half_sqrt(1-r2);
 	
 }
 
 float intersect(struct Ray* ray, __constant struct Sphere* spheres, uint sphereCount, __constant struct Sphere** hitObject){
-	float t=INFINITY;
+	float t=HUGE_VALF;
 
 	__constant struct Sphere* hit;
 	for(int i=0;i<sphereCount;i++){
 		float d = intersectSphere(ray,spheres+i);
-		if(d!=0&&d<t){
+		if(d<t){
 			t=d;
 			hit=spheres+i;
 		}
@@ -89,49 +90,53 @@ float3 raycast(struct Ray* r, __constant struct Sphere* spheres, uint sphereCoun
 	struct Ray curr = *r;
 	__constant struct Sphere* hit;
 
+#pragma unroll 4
 	for(;depth<4;depth++){
-		if(dot(throughput,throughput)<0.001f)return radiance;
+		//if(dot(throughput,throughput)<0.001f)return radiance;
 		__constant struct Sphere* hit;
 		float t = intersect(&curr, spheres, sphereCount, &hit);
-		if(t==INFINITY){
+		if(t==HUGE_VALF){
 			return radiance;
 		}
 		float3 x = curr.origin+t*curr.dir;
-		float3 n = normalize(x-hit->pos);
+		float3 n = fast_normalize(x-hit->pos);
 		radiance+=throughput*hit->emission;
 		throughput*=hit->color;
-		if(hit->material==DIFFUSE){
-			float3 d = randHemisphere(n,randState);
-			curr.origin = x+delta*d;
-			curr.dir = d;
-		} else if(hit->material==REFLECTIVE){
-			float3 d = curr.dir-2.0f*n*dot(n,curr.dir);
-			curr.origin=x+delta*d;
-			curr.dir = d;
-		} else if(hit->material==REFRACTIVE){
-			float dirn = dot(curr.dir, n);
-			bool inside = dirn > 0;
-			float refFactor = inside ? 0.5 : 2.0;
-			float cosOut2 = 1 - refFactor * refFactor * (1 - dirn * dirn);
-			if (cosOut2 < 0) {
-				curr.dir = curr.dir - 2.0f * n * dirn;
-				curr.origin = x + delta * curr.dir;
-			} else {
-				float cosOut = sqrt(cosOut2);
-				float3 parallel = cross(n, cross(-n, curr.dir));
+		float3 d = mix(n, curr.dir - 2.0f*n*dot(n, curr.dir), hit->gloss);
+		curr.origin=x+delta*d;
+		curr.dir = randHemisphere(d, mix(0.9f, 0.f, hit->gloss), randState);
+		//if(hit->material==DIFFUSE){
+		//	float3 d = randHemisphere(n, 0.9, randState);
+		//	curr.origin = x+delta*d;
+		//	curr.dir = d;
+		//} else if(hit->material==REFLECTIVE){
+		//	float3 d = curr.dir-2.0f*n*dot(n,curr.dir);
+		//	curr.origin=x+delta*d;
+		//	curr.dir = d;
+		//} else if(hit->material==REFRACTIVE){
+		//	float dirn = dot(curr.dir, n);
+		//	bool inside = dirn > 0;
+		//	float refFactor = inside ? 0.5 : 2.0;
+		//	float cosOut2 = 1 - refFactor * refFactor * (1 - dirn * dirn);
+		//	if (cosOut2 < 0) {
+		//		curr.dir = curr.dir - 2.0f * n * dirn;
+		//		curr.origin = x + delta * curr.dir;
+		//	} else {
+		//		float cosOut = sqrt(cosOut2);
+		//		float3 parallel = cross(n, cross(-n, curr.dir));
 
-				curr.dir = refFactor*parallel - (inside ? -1 : 1) * n * cosOut;
-				curr.origin = x + delta * curr.dir;
-			}
-			
-		}
+		//		curr.dir = refFactor*parallel - (inside ? -1 : 1) * n * cosOut;
+		//		curr.origin = x + delta * curr.dir;
+		//	}
+		//	
+		//}
 
 		
 	}
 	return radiance;
 }
 
-__kernel void main(__global float4* output, uint w, uint h, uint samples, struct Ray camera, __constant struct Sphere* spheres, uint sphereCount){
+__kernel void do_raytrace(__global float4* output, uint w, uint h, uint samples, struct Ray camera, __constant struct Sphere* spheres, uint sphereCount){
 	int id = get_global_id(0);
 	uint2 state = (uint2)(id,0);
 	uint x = id%w;
